@@ -22,8 +22,10 @@ class Follow(Node):
             self.listener_callback,
             qos_profile,
         )
-        timer_period = 0.5  # seconds
+        timer_period = 0.2  # seconds
         self.timer = self.create_timer(timer_period, self.timer_callback)
+
+        self.state = -1
 
     def timer_callback(self):
         '''
@@ -31,7 +33,16 @@ class Follow(Node):
         TODO: implement
         '''
         msg = Twist()
-        msg.linear.x = 1.0
+        try:
+            if self.state == 0:
+                msg.linear.x = 0.2
+                msg.angular.z = -0.3
+            elif self.state == 1:
+                msg.angular.z = 0.3
+            elif self.state == 2:
+                msg.linear.x = 0.5
+        except KeyboardInterrupt:
+            msg.linear.x = 0.0
         self.publisher_.publish(msg)
     
     def listener_callback(self,msg):
@@ -39,7 +50,45 @@ class Follow(Node):
         Subscription Callback 
         TODO: implement
         '''
-        self.get_logger().info('I heard : Range[0] "%f" Ranges[50]: "%f"' %(msg.ranges[0] ,msg.ranges[50]))
+        regions = {
+            'right':  min(min(msg.ranges[0:143]), 10),
+            'fright': min(min(msg.ranges[144:287]), 10),
+            'front':  min(min(msg.ranges[288:431]), 10),
+            'fleft':  min(min(msg.ranges[432:575]), 10),
+            'left':   min(min(msg.ranges[576:713]), 10),
+        }
+
+        d = 0.7
+        front_d = 0.5
+
+        if regions['front'] > front_d and regions['fleft'] > d and regions['fright'] > d:
+            state_description = 'case 1 - nothing'
+            self.state = 0
+        elif regions['front'] < front_d and regions['fleft'] > d and regions['fright'] > d:
+            state_description = 'case 2 - front'
+            self.state = 1
+        elif regions['front'] > front_d and regions['fleft'] > d and regions['fright'] < d:
+            state_description = 'case 3 - fright'
+            self.state = 2
+        elif regions['front'] > front_d and regions['fleft'] < d and regions['fright'] > d:
+            state_description = 'case 4 - fleft'
+            self.state = 0
+        elif regions['front'] < front_d and regions['fleft'] > d and regions['fright'] < d:
+            state_description = 'case 5 - front and fright'
+            self.state = 1
+        elif regions['front'] < front_d and regions['fleft'] < d and regions['fright'] > d:
+            state_description = 'case 6 - front and fleft'
+            self.state = 1
+        elif regions['front'] < front_d and regions['fleft'] < d and regions['fright'] < d:
+            state_description = 'case 7 - front and fleft and fright'
+            self.state = 1
+        elif regions['front'] > front_d and regions['fleft'] < d and regions['fright'] < d:
+            state_description = 'case 8 - fleft and fright'
+            self.state = 0
+        else:
+            state_description = 'unknown case'
+
+        self.get_logger().info(state_description)
         
 
 def main(args=None):
